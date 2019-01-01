@@ -94,7 +94,7 @@ export KUBEDB_NEXT_VERSION=${KUBEDB_NEXT_VERSION:-0.9.0}
   fi
 }
 
-# ${KUBEDB_PREVIOUS_VERSION}-install
+${KUBEDB_PREVIOUS_VERSION}-install
 
 ./before-upgrade.sh
 

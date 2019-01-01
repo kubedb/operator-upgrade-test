@@ -3,11 +3,11 @@ set -xeou pipefail
 
 kubectl create ns demo || true
 
-#TIMER=0
-#until kubectl create -f https://raw.githubusercontent.com/kubedb/cli/0.8.0/docs/examples/postgres/clustering/hot-postgres.yaml || [[ ${TIMER} -eq 60 ]]; do
-#  sleep 1
-#  timer+=1
-#done
+TIMER=0
+until kubectl create -f https://raw.githubusercontent.com/kubedb/cli/0.8.0/docs/examples/postgres/clustering/hot-postgres.yaml || [[ ${TIMER} -eq 60 ]]; do
+  sleep 1
+  timer+=1
+done
 
 TIMER=0
 until kubectl get pods -n demo hot-postgres-0 hot-postgres-1 hot-postgres-2 || [[ ${TIMER} -eq 60 ]]; do
@@ -20,6 +20,8 @@ kubectl wait pods --for=condition=Ready -n demo hot-postgres-0 hot-postgres-1 ho
 
 # =================================================================================
 # Insert manual data inside primary node of hot-postgres
+
+kubectl exec -i -n demo "$(kubectl get pod -n demo -l "kubedb.com/role=primary" -l "kubedb.com/name=hot-postgres" -o jsonpath='{.items[0].metadata.name}')" -- pg_isready -h localhost -U postgres -d postgres
 
 kubectl exec -i -n demo "$(kubectl get pod -n demo -l "kubedb.com/role=primary" -l "kubedb.com/name=hot-postgres" -o jsonpath='{.items[0].metadata.name}')" -- psql -h localhost -U postgres -d postgres -c '\d'
 
@@ -63,14 +65,18 @@ fi
 # ------------------------------------------------------
 # Sample database. ref: http://www.postgresqltutorial.com/postgresql-sample-database/
 
-z
+kubectl exec -i -n demo "$(kubectl get pod -n demo -l "kubedb.com/role=primary" -l "kubedb.com/name=hot-postgres" -o jsonpath='{.items[0].metadata.name}')" -- psql -h localhost -U postgres <<SQL
+    DROP DATABASE IF EXISTS dvdrental;
+    CREATE DATABASE dvdrental;
+SQL
+
 
 PGPASSWORD=$(kubectl get secrets -n demo hot-postgres-auth -o jsonpath='{.data.\POSTGRES_PASSWORD}' | base64 -d)
 
 kubectl run -it -n demo --rm --restart=Never postgres-cli --image=postgres:alpine --env="PGPASSWORD=$PGPASSWORD" --command -- bash -c \
   "wget http://www.postgresqltutorial.com/wp-content/uploads/2017/10/dvdrental.zip;
   unzip dvdrental.zip;
-  pg_restore --clean --create -h hot-postgres.demo -U postgres -d dvdrental dvdrental.tar;
+  pg_restore --clean -h hot-postgres.demo -U postgres -d dvdrental dvdrental.tar;
   psql -h hot-postgres.demo -U postgres -d dvdrental -c '\dt';
   "
 
