@@ -25,7 +25,7 @@ export KUBEDB_NEXT_VERSION=${KUBEDB_NEXT_VERSION:-0.9.0}
       --set apiserver.enableValidatingWebhook=true \
       --set apiserver.enableMutatingWebhook=true
 
-    kubectl wait deploy --for condition=available kubedb-operator -n kube-system
+    kubectl wait deploy --for condition=available kubedb-operator -n kube-system --timeout=120s
 
     popd
   fi
@@ -94,9 +94,8 @@ export KUBEDB_NEXT_VERSION=${KUBEDB_NEXT_VERSION:-0.9.0}
   fi
 }
 
-
-${KUBEDB_PREVIOUS_VERSION}-install
+# ${KUBEDB_PREVIOUS_VERSION}-install
 
 ./before-upgrade.sh
 
-${KUBEDB_NEXT_VERSION}-upgrade
+# ${KUBEDB_NEXT_VERSION}-upgrade

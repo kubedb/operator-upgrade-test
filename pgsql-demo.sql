@@ -14,3 +14,8 @@ VALUES (1, 'Paul', 32, 'California', 20000.00, '2001-07-13'),
        (3, 'Teddy', 23, 'Norway', 20000.00, '2007-12-13'),
        (4, 'Mark', 25, 'Rich-Mond ', 65000.00, '2007-12-13'),
        (5, 'David', 27, 'Texas', 85000.00, '2007-12-13');
+
+DROP DATABASE IF EXISTS dvdrental;
+CREATE DATABASE dvdrental;
+
+
