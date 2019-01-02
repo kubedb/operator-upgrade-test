@@ -4,15 +4,15 @@ set -xeou pipefail
 kubectl create ns demo || true
 
 TIMER=0
-until kubectl create -f https://raw.githubusercontent.com/kubedb/cli/0.8.0/docs/examples/postgres/clustering/hot-postgres.yaml || [[ ${TIMER} -eq 120 ]]; do
+until kubectl create -f https://raw.githubusercontent.com/kubedb/cli/${KUBEDB_PREVIOUS_VERSION}/docs/examples/postgres/clustering/hot-postgres.yaml || [[ ${TIMER} -eq 120 ]]; do
   sleep 1
-  timer+=1
+  TIMER=$((TIMER + 1))
 done
 
 TIMER=0
 until kubectl get pods -n demo hot-postgres-0 hot-postgres-1 hot-postgres-2 || [[ ${TIMER} -eq 120 ]]; do
   sleep 1
-  timer+=1
+  TIMER=$((TIMER + 1))
 done
 
 kubectl wait pods --for=condition=Ready -n demo hot-postgres-0 hot-postgres-1 hot-postgres-2 --timeout=120s
@@ -23,7 +23,7 @@ kubectl wait pods --for=condition=Ready -n demo hot-postgres-0 hot-postgres-1 ho
 TIMER=0
 until kubectl exec -i -n demo "$(kubectl get pod -n demo -l "kubedb.com/role=primary" -l "kubedb.com/name=hot-postgres" -o jsonpath='{.items[0].metadata.name}')" -- pg_isready -h localhost -U postgres || [[ ${TIMER} -eq 120 ]]; do
   sleep 1
-  timer+=1
+  TIMER=$((TIMER + 1))
 done
 
 PGPASSWORD=$(kubectl get secrets -n demo hot-postgres-auth -o jsonpath='{.data.\POSTGRES_PASSWORD}' | base64 -d)
@@ -86,7 +86,7 @@ total=$(kubectl get postgres hot-postgres -n demo -o jsonpath='{.spec.replicas}'
 
 for ((i = 0; i < ${total} ; i++)); do
 
-  kubectl exec -i -n demo hot-postgres-${i} -- psql -h localhost -U postgres <<SQL
+  kubectl exec -i -n demo hot-postgres-3 -- psql -h localhost -U postgres <<SQL
     SELECT * FROM company;
 SQL
 
@@ -107,7 +107,7 @@ SQL
   # total row count of dvdrental database
   # ref: https://stackoverflow.com/a/2611745/4628962
   count=$(
-    kubectl exec -i -n demo hot-postgres-${i} -- psql -h localhost -U postgres -d dvdrental -qtAX <<SQL
+    kubectl exec -i -n demo hot-postgres-2 -- psql -h localhost -U postgres -d dvdrental -qtAX <<SQL
     SELECT SUM(reltuples)
     FROM pg_class C
            LEFT JOIN pg_namespace N
@@ -122,81 +122,81 @@ SQL
     exit 1
   fi
 
-# ================= Test Demo. Todo: delete this code block
-# Start here
-
-   kubectl exec -i -n demo hot-postgres-${i} -- bash <<SQL
-    echo ">>>>>>>>>>>>>>>>>>>>>>>"
-    ls -la /var/pv
-    ls -la /var/pv/data
-SQL
-
-  kubectl delete po -n demo hot-postgres-${i}
-
-  kubectl wait pods --for=condition=Ready -n demo hot-postgres-${i} --timeout=120s
-
-  kubectl exec -i -n demo hot-postgres-${i} -- bash <<SQL
-    echo ">>>>>>>>>>>>>>>>>>>>>>>"
-    ls -la /var/pv
-    ls -la /var/pv/data
-SQL
-
-  # Check if Database is ready by pgready
-  TIMER=0
-  until kubectl exec -i -n demo hot-postgres-${i} -- pg_isready -h localhost -U postgres -d postgres || [[ ${TIMER} -eq 120 ]]; do
-    kubectl exec -i -n demo hot-postgres-${i} -- bash <<SQL
-    echo ">>>>>>>>>>>>>>>>>>>>>>>"
-    ls -la /var/pv
-    ls -la /var/pv/data
-SQL
-    sleep 1
-    TIMER=$((TIMER + 1))
-  done
-
-kubectl exec -i -n demo hot-postgres-${i} -- bash <<SQL
-    echo ">>>>>>>>>>>>>>>>>>>>>>>"
-    ls -la /var/pv
-    ls -la /var/pv/data
-SQL
-
-  kubectl exec -i -n demo hot-postgres-${i} -- psql -h localhost -U postgres <<SQL
-    SELECT * FROM company;
-SQL
-
-  count=$(
-    kubectl exec -i -n demo hot-postgres-${i} -- psql -h localhost -U postgres -qtAX <<SQL
-    SELECT count(*) FROM company;
-SQL
-  )
-
-  if [ $count != "5" ]; then
-    echo "For postgres: Row count Got: $count. But Expected: 5"
-    exit 1
-  fi
-
-  # -----------------------------------------
-  # dvd rental data
-
-  # total row count of dvdrental database
-  # ref: https://stackoverflow.com/a/2611745/4628962
-
-  count=$(
-    kubectl exec -i -n demo hot-postgres-${i} -- psql -h localhost -U postgres -d dvdrental -qtAX <<SQL
-    SELECT SUM(reltuples)
-    FROM pg_class C
-           LEFT JOIN pg_namespace N
-                     ON (N.oid = C.relnamespace)
-    WHERE nspname NOT IN ('pg_catalog', 'information_schema')
-      AND relkind = 'r';
-SQL
-  )
-
-  if [[ $count != "44820" ]]; then
-    echo "For postgres: Row count Got: $count. But Expected: 275537"
-    exit 1
-  fi
-
-# End Here
-#=================================
+## ================= Test Demo. Todo: delete this code block
+## Start here
+#
+#   kubectl exec -i -n demo hot-postgres-${i} -- bash <<SQL
+#    echo ">>>>>>>>>>>>>>>>>>>>>>>"
+#    ls -la /var/pv
+#    ls -la /var/pv/data
+#SQL
+#
+#  kubectl delete po -n demo hot-postgres-${i}
+#
+#  kubectl wait pods --for=condition=Ready -n demo hot-postgres-${i} --timeout=120s
+#
+#  kubectl exec -i -n demo hot-postgres-${i} -- bash <<SQL
+#    echo ">>>>>>>>>>>>>>>>>>>>>>>"
+#    ls -la /var/pv
+#    ls -la /var/pv/data
+#SQL
+#
+#  # Check if Database is ready by pgready
+#  TIMER=0
+#  until kubectl exec -i -n demo hot-postgres-${i} -- pg_isready -h localhost -U postgres -d postgres || [[ ${TIMER} -eq 120 ]]; do
+#    kubectl exec -i -n demo hot-postgres-${i} -- bash <<SQL
+#    echo ">>>>>>>>>>>>>>>>>>>>>>>"
+#    ls -la /var/pv
+#    ls -la /var/pv/data
+#SQL
+#    sleep 1
+#    TIMER=$((TIMER + 1))
+#  done
+#
+#kubectl exec -i -n demo hot-postgres-${i} -- bash <<SQL
+#    echo ">>>>>>>>>>>>>>>>>>>>>>>"
+#    ls -la /var/pv
+#    ls -la /var/pv/data
+#SQL
+#
+#  kubectl exec -i -n demo hot-postgres-${i} -- psql -h localhost -U postgres <<SQL
+#    SELECT * FROM company;
+#SQL
+#
+#  count=$(
+#    kubectl exec -i -n demo hot-postgres-${i} -- psql -h localhost -U postgres -qtAX <<SQL
+#    SELECT count(*) FROM company;
+#SQL
+#  )
+#
+#  if [ $count != "5" ]; then
+#    echo "For postgres: Row count Got: $count. But Expected: 5"
+#    exit 1
+#  fi
+#
+#  # -----------------------------------------
+#  # dvd rental data
+#
+#  # total row count of dvdrental database
+#  # ref: https://stackoverflow.com/a/2611745/4628962
+#
+#  count=$(
+#    kubectl exec -i -n demo hot-postgres-${i} -- psql -h localhost -U postgres -d dvdrental -qtAX <<SQL
+#    SELECT SUM(reltuples)
+#    FROM pg_class C
+#           LEFT JOIN pg_namespace N
+#                     ON (N.oid = C.relnamespace)
+#    WHERE nspname NOT IN ('pg_catalog', 'information_schema')
+#      AND relkind = 'r';
+#SQL
+#  )
+#
+#  if [[ $count != "44820" ]]; then
+#    echo "For postgres: Row count Got: $count. But Expected: 275537"
+#    exit 1
+#  fi
+#
+## End Here
+##=================================
 
 done

@@ -1,0 +1,229 @@
+postgres=# select * from pg_stat_replication;
+ pid | usesysid | usename  | application_name | client_addr | client_hostname | client_port |         backend_start         | backend_xmin |   state   | sent_location | write_location | flush_location | replay_location | sync_priority | sync_state 
+-----+----------+----------+------------------+-------------+-----------------+-------------+-------------------------------+--------------+-----------+---------------+----------------+----------------+-----------------+---------------+------------
+  59 |       10 | postgres | hot-postgres-1   | 172.17.0.9  |                 |       40710 | 2019-01-07 04:52:00.121031+00 |              | streaming | 0/4043AB8     | 0/4043AB8      | 0/4043AB8      | 0/4043AB8       |             0 | async
+  64 |       10 | postgres | hot-postgres-2   | 172.17.0.10 |                 |       47936 | 2019-01-07 04:52:01.603239+00 |              | streaming | 0/4043AB8     | 0/4043AB8      | 0/4043AB8      | 0/4043AB8       |             0 | async
+(2 rows)
+
+
+> SELECT pg_current_xlog_location(); # on master
+
+> select pg_last_xlog_receive_location(); # on standby
+
+> select pg_last_xlog_replay_location(); # on standby
+
+> select pg_last_xact_replay_timestamp(); # on standby
+
+> select pg_xlog_location_diff('0/5001C60','0/5001B80');
+
+> select pg_xlogfile_name('0/5001C60');
+
+> select pg_xlogfile_name(pg_current_xlog_insert_location());
+
+> select * from pg_ls_dir('pg_xlog');
+
+> pg_controldata | | grep "Latest checkpoint's REDO WAL file" | grep -oE '[^ ]+$'
+> pg_controldata | | grep "Latest checkpoint's REDO WAL file" | awk 'NF{ print $NF }'
+ref: https://stackoverflow.com/questions/16616975/how-do-i-get-the-last-word-in-each-line-with-bash
+
+1. get wal replay location from standby.
+2. get wal file name from master using location got on 1.
+  >  
+3. ls -la from master node. 'select * from pg_ls_dir('pg_xlog');' and grep the required file name.
+4. If file exists in grep, run a pg_rewind, then continue serving.
+5. If file doesn't exists 
+6. State of replication: run command on master:
+  > select state from pg_stat_replication where pg_stat_replication.application_name='hot-postgres-2';
+
+> export PGPASSWORD=ji_pqngfw348Fefe 
+pg_rewind --source-server="host=hot-postgres.demo user=postgres port=5432 dbname=postgres" --target-pgdata=/var/pv/data --debug --progress
+
+> pw_rewind.
+Possible error:
+1. could not find previous WAL record at 0/30000F8
+2. target server must be shut down cleanly
+3. could not find common ancestor of the source and target cluster's timelines
+4. target server needs to use either data checksums or "wal_log_hints = on"
+
+
+# debug
+LOG:  invalid record length at 0/B000098: wanted 24, got 0
+LOG:  started streaming WAL from primary at 0/B000000 on timeline 2
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+FATAL:  terminating walreceiver process due to administrator command
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+LOG:  record with incorrect prev-link 10000/21B0000 at 0/B000098
+
+
+
+
+>> prev-link error
+pg_control version number:            960
+Catalog version number:               201608131
+Database system identifier:           6649236457172082716
+Database cluster state:               shut down
+pg_control last modified:             Tue Jan 22 08:37:56 2019
+Latest checkpoint location:           0/F000028
+Prior checkpoint location:            0/D000060
+Latest checkpoint's REDO location:    0/F000028
+Latest checkpoint's REDO WAL file:    00000002000000000000000F
+Latest checkpoint's TimeLineID:       2
+Latest checkpoint's PrevTimeLineID:   2
+Latest checkpoint's full_page_writes: on
+Latest checkpoint's NextXID:          0:556
+Latest checkpoint's NextOID:          24596
+Latest checkpoint's NextMultiXactId:  1
+Latest checkpoint's NextMultiOffset:  0
+Latest checkpoint's oldestXID:        539
+Latest checkpoint's oldestXID's DB:   1
+Latest checkpoint's oldestActiveXID:  0
+Latest checkpoint's oldestMultiXid:   1
+Latest checkpoint's oldestMulti's DB: 1
+Latest checkpoint's oldestCommitTsXid:0
+Latest checkpoint's newestCommitTsXid:0
+Time of latest checkpoint:            Tue Jan 22 08:37:56 2019
+Fake LSN counter for unlogged rels:   0/1
+Minimum recovery ending location:     0/0
+Min recovery ending loc's timeline:   0
+Backup start location:                0/0
+Backup end location:                  0/0
+End-of-backup record required:        no
+wal_level setting:                    replica
+wal_log_hints setting:                on
+max_connections setting:              100
+max_worker_processes setting:         8
+max_prepared_xacts setting:           0
+max_locks_per_xact setting:           64
+track_commit_timestamp setting:       off
+Maximum data alignment:               8
+Database block size:                  8192
+Blocks per segment of large relation: 131072
+WAL block size:                       8192
+Bytes per WAL segment:                16777216
+Maximum length of identifiers:        64
+Maximum columns in an index:          32
+Maximum size of a TOAST chunk:        1996
+Size of a large-object chunk:         2048
+Date/time type storage:               64-bit integers
+Float4 argument passing:              by value
+Float8 argument passing:              by value
+Data page checksum version:           0
+
+
+
+
+working >> pg_control version number:            960
+Catalog version number:               201608131
+Database system identifier:           6649236457172082716
+Database cluster state:               shut down in recovery
+pg_control last modified:             Tue Jan 22 08:37:56 2019
+Latest checkpoint location:           0/D000060
+Prior checkpoint location:            0/D000060
+Latest checkpoint's REDO location:    0/D000028
+Latest checkpoint's REDO WAL file:    00000002000000000000000D
+Latest checkpoint's TimeLineID:       2
+Latest checkpoint's PrevTimeLineID:   2
+Latest checkpoint's full_page_writes: on
+Latest checkpoint's NextXID:          0:554
+Latest checkpoint's NextOID:          32768
+Latest checkpoint's NextMultiXactId:  1
+Latest checkpoint's NextMultiOffset:  0
+Latest checkpoint's oldestXID:        539
+Latest checkpoint's oldestXID's DB:   1
+Latest checkpoint's oldestActiveXID:  554
+Latest checkpoint's oldestMultiXid:   1
+Latest checkpoint's oldestMulti's DB: 1
+Latest checkpoint's oldestCommitTsXid:0
+Latest checkpoint's newestCommitTsXid:0
+Time of latest checkpoint:            Tue Jan 22 08:37:48 2019
+Fake LSN counter for unlogged rels:   0/1
+Minimum recovery ending location:     0/E0237B0
+Min recovery ending loc's timeline:   2
+Backup start location:                0/0
+Backup end location:                  0/0
+End-of-backup record required:        no
+wal_level setting:                    replica
+wal_log_hints setting:                on
+max_connections setting:              100
+max_worker_processes setting:         8
+max_prepared_xacts setting:           0
+max_locks_per_xact setting:           64
+track_commit_timestamp setting:       off
+Maximum data alignment:               8
+Database block size:                  8192
+Blocks per segment of large relation: 131072
+WAL block size:                       8192
+Bytes per WAL segment:                16777216
+Maximum length of identifiers:        64
+Maximum columns in an index:          32
+Maximum size of a TOAST chunk:        1996
+Size of a large-object chunk:         2048
+Date/time type storage:               64-bit integers
+Float4 argument passing:              by value
+Float8 argument passing:              by value
+Data page checksum version:           0
+
+Panic:
+pg_control version number:            960
+Catalog version number:               201608131
+Database system identifier:           6649236457172082716
+Database cluster state:               shut down in recovery
+pg_control last modified:             Tue Jan 22 08:39:54 2019
+Latest checkpoint location:           0/F000028
+Prior checkpoint location:            0/F000028
+Latest checkpoint's REDO location:    0/F000028
+Latest checkpoint's REDO WAL file:    00000002000000000000000F
+Latest checkpoint's TimeLineID:       2
+Latest checkpoint's PrevTimeLineID:   2
+Latest checkpoint's full_page_writes: on
+Latest checkpoint's NextXID:          0:556
+Latest checkpoint's NextOID:          24596
+Latest checkpoint's NextMultiXactId:  1
+Latest checkpoint's NextMultiOffset:  0
+Latest checkpoint's oldestXID:        539
+Latest checkpoint's oldestXID's DB:   1
+Latest checkpoint's oldestActiveXID:  0
+Latest checkpoint's oldestMultiXid:   1
+Latest checkpoint's oldestMulti's DB: 1
+Latest checkpoint's oldestCommitTsXid:0
+Latest checkpoint's newestCommitTsXid:0
+Time of latest checkpoint:            Tue Jan 22 08:37:56 2019
+Fake LSN counter for unlogged rels:   0/1
+Minimum recovery ending location:     0/F000098
+Min recovery ending loc's timeline:   2
+Backup start location:                0/0
+Backup end location:                  0/0
+End-of-backup record required:        no
+wal_level setting:                    replica
+wal_log_hints setting:                on
+max_connections setting:              100
+max_worker_processes setting:         8
+max_prepared_xacts setting:           0
+max_locks_per_xact setting:           64
+track_commit_timestamp setting:       off
+Maximum data alignment:               8
+Database block size:                  8192
+Blocks per segment of large relation: 131072
+WAL block size:                       8192
+Bytes per WAL segment:                16777216
+Maximum length of identifiers:        64
+Maximum columns in an index:          32
+Maximum size of a TOAST chunk:        1996
+Size of a large-object chunk:         2048
+Date/time type storage:               64-bit integers
+Float4 argument passing:              by value
+Float8 argument passing:              by value
+Data page checksum version:           0

@@ -79,7 +79,7 @@ trap cleanup EXIT
 
 0.9.0-uninstall() {
   if [[ "${KUBEDB_INSTALLER}" == "BASH" ]]; then
-    curl -fsSL https://raw.githubusercontent.com/kubedb/cli/0.9.0/hack/deploy/kubedb.sh | bash -s -- --uninstall $1
+    curl -fsSL https://raw.githubusercontent.com/kubedb/cli/0.9.0/hack/deploy/kubedb.sh | bash -s -- --uninstall
   elif [[ "$KUBEDB_INSTALLER" == "HELM" ]]; then
     helm delete kubedb-operator $1
   fi
@@ -88,7 +88,7 @@ trap cleanup EXIT
 0.9.0-upgrade() {
   if [[ "${KUBEDB_INSTALLER}" == "BASH" ]]; then
     ${KUBEDB_PREVIOUS_VERSION}-uninstall
-    0.8.0-install
+    0.9.0-install
   elif [[ "$KUBEDB_INSTALLER" == "HELM" ]]; then
     # helm upgrade --install kubedb-operator appscode/kubedb --version 0.9.0
     helm upgrade kubedb-operator appscode/kubedb --version 0.9.0
