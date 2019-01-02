@@ -7,6 +7,14 @@ export KUBEDB_INSTALLER=${KUBEDB_INSTALLER:-HELM}
 export KUBEDB_PREVIOUS_VERSION=${KUBEDB_PREVIOUS_VERSION:-0.8.0}
 export KUBEDB_NEXT_VERSION=${KUBEDB_NEXT_VERSION:-0.9.0}
 
+# http://redsymbol.net/articles/bash-exit-traps/
+function cleanup() {
+  helm delete --purge kubedb-operator || true
+  helm delete --purge kubedb-catalog || true
+  curl -fsSL https://raw.githubusercontent.com/kubedb/cli/${KUBEDB_NEXT_VERSION}/hack/deploy/kubedb.sh | bash -s -- --uninstall --purge || true
+}
+trap cleanup EXIT
+
 0.8.0-install() {
   if [[ "${KUBEDB_INSTALLER}" == "BASH" ]]; then
     curl -fsSL https://raw.githubusercontent.com/kubedb/cli/0.8.0/hack/deploy/kubedb.sh | bash
@@ -44,7 +52,8 @@ export KUBEDB_NEXT_VERSION=${KUBEDB_NEXT_VERSION:-0.9.0}
     ${KUBEDB_PREVIOUS_VERSION}-uninstall
     0.8.0-install
   elif [[ "$KUBEDB_INSTALLER" == "HELM" ]]; then
-    helm upgrade --install kubedb-operator appscode/kubedb --version 0.8.0
+    # helm upgrade --install kubedb-operator appscode/kubedb --version 0.8.0
+    helm upgrade kubedb-operator appscode/kubedb --version 0.8.0
   fi
 }
 
@@ -60,7 +69,7 @@ export KUBEDB_NEXT_VERSION=${KUBEDB_NEXT_VERSION:-0.9.0}
     TIMER=0
     until kubectl get crd elasticsearchversions.catalog.kubedb.com memcachedversions.catalog.kubedb.com mongodbversions.catalog.kubedb.com mysqlversions.catalog.kubedb.com postgresversions.catalog.kubedb.com redisversions.catalog.kubedb.com || [[ ${TIMER} -eq 60 ]]; do
       sleep 1
-      timer+=1
+      TIMER=$((TIMER + 1))
     done
 
     helm install appscode/kubedb-catalog --name kubedb-catalog --version 0.9.0 \
@@ -81,12 +90,13 @@ export KUBEDB_NEXT_VERSION=${KUBEDB_NEXT_VERSION:-0.9.0}
     ${KUBEDB_PREVIOUS_VERSION}-uninstall
     0.8.0-install
   elif [[ "$KUBEDB_INSTALLER" == "HELM" ]]; then
-    helm upgrade --install kubedb-operator appscode/kubedb --version 0.9.0
+    # helm upgrade --install kubedb-operator appscode/kubedb --version 0.9.0
+    helm upgrade kubedb-operator appscode/kubedb --version 0.9.0
 
     TIMER=0
     until kubectl get crd elasticsearchversions.catalog.kubedb.com memcachedversions.catalog.kubedb.com mongodbversions.catalog.kubedb.com mysqlversions.catalog.kubedb.com postgresversions.catalog.kubedb.com redisversions.catalog.kubedb.com || [[ ${TIMER} -eq 60 ]]; do
       sleep 1
-      timer+=1
+      TIMER=$((TIMER + 1))
     done
 
     helm upgrade --install kubedb-catalog appscode/kubedb-catalog --version 0.9.0 --namespace kube-system
@@ -98,4 +108,6 @@ ${KUBEDB_PREVIOUS_VERSION}-install
 
 ./before-upgrade.sh
 
-# ${KUBEDB_NEXT_VERSION}-upgrade
+${KUBEDB_NEXT_VERSION}-upgrade
+
+./after-upgrade.sh
