@@ -1,2 +1,9 @@
 # Created by .ignore support plugin (hsz.mobi)
+
 .idea
+
+*.kubedb.com.yaml
+*.appscode.com.yaml
+
+ca.crt
+ca.key

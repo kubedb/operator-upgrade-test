@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -xeou pipefail
+set -eou pipefail
 
 export KUBEDB_PREVIOUS_VERSION=${KUBEDB_PREVIOUS_VERSION:-0.8.0}
 export KUBEDB_NEXT_VERSION=${KUBEDB_NEXT_VERSION:-0.9.0}
@@ -7,21 +7,60 @@ export KUBEDB_NEXT_VERSION=${KUBEDB_NEXT_VERSION:-0.9.0}
 # =================================================================================
 # Upgrade DB versions to latest
 
-if [[ ${KUBEDB_NEXT_VERSION} == "0.9.0" ]]; then
+echo -e "${Cyan}Patch postgres version${NC}"
+
+if [[ ${KUBEDB_NEXT_VERSION} == "0.10.0" ]]; then
 
   TIMER=0
-  until kubectl patch -n demo pg/hot-postgres -p '{"spec": {"version": "9.6-v1","updateStrategy": { "type": "OnDelete" } } }' --type="merge" || [[ ${TIMER} -eq 120 ]]; do
-    sleep 1
+  until kubectl patch -n demo pg/hot-postgres -p '{"spec": {"version": "9.6-v2", "replicas": 5, "updateStrategy": { "type": "OnDelete" } } }' --type="merge" || [[ ${TIMER} -eq 120 ]]; do
+    sleep 2
     TIMER=$((TIMER + 1))
   done
 fi
 
-# =================================================================================
-# Check data from all nodes
+if [[ ${KUBEDB_NEXT_VERSION} == "0.11.0" ]]; then
+
+  TIMER=0
+  until kubectl patch -n demo pg/hot-postgres -p '{"spec": {"version": "9.6-v3", "replicas": 5, "updateStrategy": { "type": "OnDelete" } } }' --type="merge" || [[ ${TIMER} -eq 120 ]]; do
+    sleep 2
+    TIMER=$((TIMER + 1))
+  done
+fi
+
+if [[ ${KUBEDB_NEXT_VERSION} == "master" ]]; then
+
+  TIMER=0
+  until kubectl patch -n demo pg/hot-postgres -p '{"spec": {"version": "9.6-v4", "replicas": 5, "updateStrategy": { "type": "OnDelete" } } }' --type="merge" || [[ ${TIMER} -eq 120 ]]; do
+    sleep 2
+    TIMER=$((TIMER + 1))
+  done
+fi
+
+# ================================================================================
+# Check that operator notices the crd change
+echo -e "${Cyan}Check that operator notices the crd changes${NC}: ie, two extra pod comes up."
 
 total=$(kubectl get postgres hot-postgres -n demo -o jsonpath='{.spec.replicas}')
 
-for ((i = ${total} - 1; i >=0 ; i--)); do
+for ((i = 0; i < ${total}; i++)); do
+  TIMER=0
+  until kubectl get pods -n demo hot-postgres-${i} || [[ ${TIMER} -eq 120 ]]; do
+    sleep 2
+    TIMER=$((TIMER + 1))
+  done
+
+  kubectl wait pods --for=condition=Ready -n demo hot-postgres-${i} --timeout=120s
+
+done
+
+# =================================================================================
+# Check data from all nodes
+
+echo -e "${Cyan}Check data from all nodes${NC}"
+
+total=$(kubectl get postgres hot-postgres -n demo -o jsonpath='{.spec.replicas}')
+
+for ((i = ${total} - 1; i >= 0; i--)); do
 
   # Delete the pod because of onDelete update strategy
   kubectl delete po -n demo hot-postgres-${i}
@@ -31,10 +70,9 @@ for ((i = ${total} - 1; i >=0 ; i--)); do
   # Check if Database is ready by pgready
   TIMER=0
   until kubectl exec -i -n demo hot-postgres-${i} -- pg_isready -h localhost -U postgres -d postgres || [[ ${TIMER} -eq 120 ]]; do
-    sleep 1
+    sleep 2
     TIMER=$((TIMER + 1))
   done
-
 
   kubectl exec -i -n demo hot-postgres-${i} -- psql -h localhost -U postgres <<SQL
     SELECT * FROM company;
@@ -47,7 +85,7 @@ SQL
   )
 
   if [[ ${count} != 5 ]]; then
-    echo "For postgres: Row count Got: $count. But Expected: 5"
+    echo -e "${Red}For postgres: Row count Got: $count. But Expected: 5${NC}"
     exit 1
   fi
 
@@ -69,7 +107,7 @@ SQL
   )
 
   if [[ ${count} != 44820 ]]; then
-    echo "For postgres: Row count Got: $count. But Expected: 44820"
+    echo -e "${Red}For postgres: Row count Got: $count. But Expected: 44820${NC}"
     exit 1
   fi
 

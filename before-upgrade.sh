@@ -1,28 +1,39 @@
 #!/usr/bin/env bash
-set -xeou pipefail
+set -eou pipefail
 
 kubectl create ns demo || true
 
+echo -e "${Cyan}Deploy Hot postgres${NC}: kubectl create -f https://raw.githubusercontent.com/kubedb/cli/${KUBEDB_PREVIOUS_VERSION}/docs/examples/postgres/clustering/hot-postgres.yaml"
+
 TIMER=0
 until kubectl create -f https://raw.githubusercontent.com/kubedb/cli/${KUBEDB_PREVIOUS_VERSION}/docs/examples/postgres/clustering/hot-postgres.yaml || [[ ${TIMER} -eq 120 ]]; do
-  sleep 1
+  sleep 2
   TIMER=$((TIMER + 1))
 done
 
-TIMER=0
-until kubectl get pods -n demo hot-postgres-0 hot-postgres-1 hot-postgres-2 || [[ ${TIMER} -eq 120 ]]; do
-  sleep 1
-  TIMER=$((TIMER + 1))
-done
+echo -e "${Cyan}Wait for postgres instances to start running${NC}"
 
-kubectl wait pods --for=condition=Ready -n demo hot-postgres-0 hot-postgres-1 hot-postgres-2 --timeout=120s
+total=$(kubectl get postgres hot-postgres -n demo -o jsonpath='{.spec.replicas}')
+
+for ((i = 0; i < ${total}; i++)); do
+  TIMER=0
+  until kubectl get pods -n demo hot-postgres-${i} || [[ ${TIMER} -eq 120 ]]; do
+    sleep 2
+    TIMER=$((TIMER + 1))
+  done
+
+  kubectl wait pods --for=condition=Ready -n demo hot-postgres-${i} --timeout=120s
+
+done
 
 # =================================================================================
 # Insert manual data inside host service
 
+echo -e "${Cyan}Insert data in postgres${NC}"
+
 TIMER=0
 until kubectl exec -i -n demo "$(kubectl get pod -n demo -l "kubedb.com/role=primary" -l "kubedb.com/name=hot-postgres" -o jsonpath='{.items[0].metadata.name}')" -- pg_isready -h localhost -U postgres || [[ ${TIMER} -eq 120 ]]; do
-  sleep 1
+  sleep 2
   TIMER=$((TIMER + 1))
 done
 
@@ -58,12 +69,14 @@ SQL
 )
 
 if [[ ${count} != 5 ]]; then
-  echo "For postgres: Row count Got: $count. But Expected: 5"
+  echo -e "${Red}For postgres: Row count Got: $count. But Expected: 5${NC}"
   exit 1
 fi
 
 # ------------------------------------------------------
 # Sample database. ref: http://www.postgresqltutorial.com/postgresql-sample-database/
+
+echo -e "${Cyan}Insert sample database-dvdrental${NC}"
 
 kubectl exec -i -n demo "$(kubectl get pod -n demo -l "kubedb.com/role=primary" -l "kubedb.com/name=hot-postgres" -o jsonpath='{.items[0].metadata.name}')" -- psql -h localhost -U postgres <<SQL
     DROP DATABASE IF EXISTS dvdrental;
@@ -82,11 +95,13 @@ kubectl run -it -n demo --rm --restart=Never postgres-cli --image=postgres:alpin
 # =================================================================================
 # Check data from all nodes
 
+echo -e "${Cyan}Check data from all nodes${NC}"
+
 total=$(kubectl get postgres hot-postgres -n demo -o jsonpath='{.spec.replicas}')
 
-for ((i = 0; i < ${total} ; i++)); do
+for ((i = 0; i < ${total}; i++)); do
 
-  kubectl exec -i -n demo hot-postgres-3 -- psql -h localhost -U postgres <<SQL
+  kubectl exec -i -n demo hot-postgres-$i -- psql -h localhost -U postgres <<SQL
     SELECT * FROM company;
 SQL
 
@@ -97,7 +112,7 @@ SQL
   )
 
   if [[ ${count} != "5" ]]; then
-    echo "For postgres: Row count Got: $count. But Expected: 5"
+    echo -e "${Red}For postgres: Row count Got: $count. But Expected: 5${NC}"
     exit 1
   fi
 
@@ -118,85 +133,8 @@ SQL
   )
 
   if [[ ${count} != 44820 ]]; then
-    echo "For postgres: Row count Got: $count. But Expected: 44820"
+    echo -e "${Red}For postgres: Row count Got: $count. But Expected: 44820${NC}"
     exit 1
   fi
-
-## ================= Test Demo. Todo: delete this code block
-## Start here
-#
-#   kubectl exec -i -n demo hot-postgres-${i} -- bash <<SQL
-#    echo ">>>>>>>>>>>>>>>>>>>>>>>"
-#    ls -la /var/pv
-#    ls -la /var/pv/data
-#SQL
-#
-#  kubectl delete po -n demo hot-postgres-${i}
-#
-#  kubectl wait pods --for=condition=Ready -n demo hot-postgres-${i} --timeout=120s
-#
-#  kubectl exec -i -n demo hot-postgres-${i} -- bash <<SQL
-#    echo ">>>>>>>>>>>>>>>>>>>>>>>"
-#    ls -la /var/pv
-#    ls -la /var/pv/data
-#SQL
-#
-#  # Check if Database is ready by pgready
-#  TIMER=0
-#  until kubectl exec -i -n demo hot-postgres-${i} -- pg_isready -h localhost -U postgres -d postgres || [[ ${TIMER} -eq 120 ]]; do
-#    kubectl exec -i -n demo hot-postgres-${i} -- bash <<SQL
-#    echo ">>>>>>>>>>>>>>>>>>>>>>>"
-#    ls -la /var/pv
-#    ls -la /var/pv/data
-#SQL
-#    sleep 1
-#    TIMER=$((TIMER + 1))
-#  done
-#
-#kubectl exec -i -n demo hot-postgres-${i} -- bash <<SQL
-#    echo ">>>>>>>>>>>>>>>>>>>>>>>"
-#    ls -la /var/pv
-#    ls -la /var/pv/data
-#SQL
-#
-#  kubectl exec -i -n demo hot-postgres-${i} -- psql -h localhost -U postgres <<SQL
-#    SELECT * FROM company;
-#SQL
-#
-#  count=$(
-#    kubectl exec -i -n demo hot-postgres-${i} -- psql -h localhost -U postgres -qtAX <<SQL
-#    SELECT count(*) FROM company;
-#SQL
-#  )
-#
-#  if [ $count != "5" ]; then
-#    echo "For postgres: Row count Got: $count. But Expected: 5"
-#    exit 1
-#  fi
-#
-#  # -----------------------------------------
-#  # dvd rental data
-#
-#  # total row count of dvdrental database
-#  # ref: https://stackoverflow.com/a/2611745/4628962
-#
-#  count=$(
-#    kubectl exec -i -n demo hot-postgres-${i} -- psql -h localhost -U postgres -d dvdrental -qtAX <<SQL
-#    SELECT SUM(reltuples)
-#    FROM pg_class C
-#           LEFT JOIN pg_namespace N
-#                     ON (N.oid = C.relnamespace)
-#    WHERE nspname NOT IN ('pg_catalog', 'information_schema')
-#      AND relkind = 'r';
-#SQL
-#  )
-#
-#  if [[ $count != "44820" ]]; then
-#    echo "For postgres: Row count Got: $count. But Expected: 275537"
-#    exit 1
-#  fi
-#
-## End Here
-##=================================
 
 done
